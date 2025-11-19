@@ -2,125 +2,114 @@
 <html lang="zh-HK">
 <head>
   <meta charset="UTF-8">
-  <title>聖誕交換禮物抽籤（即場抽動畫）</title>
+  <title>2025年度聖誕交換禮物抽獎</title>
   <style>
-    body{max-width:460px; margin:36px auto; font-family:sans-serif;}
-    #allnames, #drawarea{margin:20px 0;}
-    #flipCard{margin:22px auto;width:260px;height:120px;perspective:700px;}
-    .flipInner{width:100%;height:100%;transition:.7s;transform-style:preserve-3d;position:relative;}
+    body{max-width:520px;margin:36px auto;font-family:sans-serif;}
+    #entry, #drawarea{margin:18px 0;}
+    #lotteryCard{margin:35px auto;width:310px;height:160px;perspective:900px;}
+    .flipInner{width:100%;height:100%;transition:.6s;transform-style:preserve-3d;position:relative;}
     .flipInner.flipped{transform:rotateY(180deg);}
-    .flipFront,.flipBack{position:absolute;width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:2em;border:2px solid #6cf;border-radius:15px;background:#fff;}
-    .flipBack{background:linear-gradient(120deg,#fef,#9fd);transform:rotateY(180deg);}
-    input,button{margin:6px 2px;padding:2px 8px;}
-    textarea{width:250px;}
+    .flipFront,.flipBack{position:absolute;width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:2em;border:2.5px solid #62e;border-radius:20px;background:#fff;}
+    .flipBack{background:linear-gradient(135deg,#f8f,#cef);transform:rotateY(180deg);}
+    input,button{margin:6px 2px;padding:6px 10px;font-size:1.2em;}
+    #nameList{width:280px;}
+    h1{margin-bottom:.6em;}
   </style>
 </head>
 <body>
-  <h2>聖誕交換禮物現場抽（有動畫）</h2>
-  <div id="setup">
-    <p>一次性輸入所有參加者名（每行一個，建議自己抄底）：</p>
-    <textarea id="allnames" rows="7" placeholder="Alex&#10;Bonnie&#10;Charlie..."></textarea>
-    <br><button onclick="startGame()">開始進入抽籤階段</button>
+  <h1>2025年度聖誕交換禮物抽獎</h1>
+  <div id="entry">
+    <b>請選擇你的名字：</b>
+    <select id="myName">
+      <option value="">請選擇</option>
+      <option>kitty</option>
+      <option>e0</option>
+      <option>may</option>
+      <option>tiff</option>
+      <option>snow</option>
+      <option>manying</option>
+    </select>
+    <button onclick="beginLuckyDraw()">抽抽看！</button>
   </div>
-
   <div id="drawarea" style="display:none;">
-    <p><b>第 <span id="curNum"></span> 位參加者抽籤：</b></p>
-    你叫乜名？<input id="myName" autocomplete="off">
-    <button onclick="drawSecret()">抽配對！</button>
-    <div id="flipCard" style="display:none;">
+    <div id="lotteryCard" style="display:none;">
       <div class="flipInner" id="flipInner">
-        <div class="flipFront" onclick="flip()">點我翻牌！</div>
-        <div class="flipBack" id="secretResult"></div>
+        <div class="flipFront" onclick="flip()">點我抽出2025年度送禮對象</div>
+        <div class="flipBack" id="drawResult"></div>
       </div>
     </div>
-    <p id="remind"></p>
+    <div id="reminder"></div>
   </div>
-
   <script>
-    let namesList = [];
-    let remainingDrawNames = [];
-    let assigned = {};
-    let round = 1;
+    // 已參加名單
+    const names = ["kitty","e0","may","tiff","snow","manying"];
+    // pairing 狀態（保存在 localStorage）
+    let assigned = JSON.parse(localStorage.getItem('santaPairs2025')||'null');
+    let drawn = JSON.parse(localStorage.getItem('santaDrawn2025')||'{}');
 
-    // Derangement: 無人抽自己
-    function derangement(arr, banned) {
-      let trys=0, n=arr.length, arr2=arr.slice();
+    // 產生 derangement，避免互抽
+    function generatePairing(namelist) {
+      let tries=0, n=namelist.length, arr2=namelist.slice();
       while(true){
         for(let i=n-1;i>0;i--){
           let j=Math.floor(Math.random()*(i+1));
           [arr2[i],arr2[j]]=[arr2[j],arr2[i]];
         }
-        let valid = true;
-        for(let i=0;i<n;i++){
-          if(arr2[i]===banned[i]) valid=false;
-        }
+        let ok = true;
+        for(let i=0;i<n;i++)
+          if(arr2[i]===namelist[i]) ok = false;
         // 減互抽
-        for(let i=0;i<n;i++){
-          if(arr2[arr2[i]]===banned[i]) valid=false;
-        }
-        if(valid) break;
-        trys++; if(trys>30) break;
+        for(let i=0;i<n;i++)
+          if(arr2[arr2[i]]===namelist[i]) ok = false;
+        if(ok) break;
+        tries++; if(tries>30) break;
       }
+      // failSafe 防止自己
       let failSafe=0;
-      while(arr2.some((x,i)=>x===banned[i])) {
+      while(arr2.some((x,i)=>x===namelist[i])) {
         for(let i=n-1;i>0;i--){
           let j=Math.floor(Math.random()*(i+1));
           [arr2[i],arr2[j]]=[arr2[j],arr2[i]];
         }
         failSafe++; if(failSafe>40) break;
       }
-      return arr2;
+      let map={},used=new Set();
+      namelist.forEach((me,i)=>{
+        map[me]=arr2[i];
+        used.add(arr2[i]);
+      });
+      return map;
     }
 
-    function startGame(){
-      namesList = allnames.value.split('\n').map(x=>x.trim()).filter(x=>x);
-      if(namesList.length<3){
-        alert('至少3人！');
+    // 首次 load: 根據 localStorage 配對, 沒有就重新分配
+    if(!assigned || Object.keys(assigned).length!==names.length) {
+      assigned = generatePairing(names);
+      localStorage.setItem('santaPairs2025',JSON.stringify(assigned));
+      drawn = {};
+      localStorage.setItem('santaDrawn2025',JSON.stringify(drawn));
+    }
+
+    function beginLuckyDraw(){
+      let sel = document.getElementById("myName").value;
+      if(!sel) {alert("請選擇你的名字！");return;}
+      if(!names.includes(sel)){alert("唔係參加名單");return;}
+      // 已抽過
+      if(drawn[sel]){
+        document.getElementById('entry').style.display='none';
+        document.getElementById('drawarea').style.display='';
+        document.getElementById('reminder').innerHTML =
+          `<b>${sel}</b> 已經抽過：你抽到要送禮物俾 <span style="color:#E23;">${assigned[sel]}</span>！`;
         return;
       }
-      if(new Set(namesList).size !== namesList.length){
-        alert('唔好有重複名！');
-        return;
-      }
-      remainingDrawNames = namesList.slice();
-      assigned = {};
-      document.getElementById('setup').style.display='none';
+      // 給動畫：抽獎卡
+      document.getElementById('entry').style.display='none';
       document.getElementById('drawarea').style.display='';
-      document.getElementById('curNum').textContent = round;
-      document.getElementById('remind').textContent = `仲有 ${namesList.length+1-round} 位未抽`;
-    }
-
-    function drawSecret(){
-      let me = myName.value.trim();
-      if(!me) {alert('請輸入你個名');return;}
-      if(!remainingDrawNames.includes(me)) {alert('你唔係原名單內，抄錯咗呀？');return;}
-      if(assigned[me]) {alert('你抽過啦！');return;}
-      let others = remainingDrawNames.filter(n=>n!==me);
-      if(others.length===0){
-        alert('最後一位自動分配，不用再抽！');
-        return;
-      }
-      // derangement of remaining names (exclude自己)
-      let resultArr = derangement(others, others);
-      let pair;
-      do {
-        let idx = Math.floor(Math.random()*resultArr.length);
-        pair = resultArr[idx];
-      } while(pair===me || pair in assigned);
-
-      assigned[me] = pair;
-      remainingDrawNames.splice(remainingDrawNames.indexOf(me),1);
-      document.getElementById('flipCard').style.display='';
+      document.getElementById('lotteryCard').style.display='';
       document.getElementById('flipInner').classList.remove('flipped');
-      document.getElementById('secretResult').innerHTML = `<b>${me}</b> 你要送禮物俾 👉 <span style="color:#B23">${pair}</span>！`;
-      myName.value = '';
-      round++;
-      document.getElementById('curNum').textContent = round;
-      if(remainingDrawNames.length===0){
-        document.getElementById('remind').textContent = '已全部抽完，可以去準備禮物啦！';
-      } else {
-        document.getElementById('remind').textContent = `仲有 ${remainingDrawNames.length} 位未抽`;
-      }
+      document.getElementById('drawResult').innerHTML =
+        `<span style="font-weight:bold;">${sel}</span> 你要送禮物俾 👉 <span style="color:#962">${assigned[sel]}</span>！`;
+      drawn[sel]=true;
+      localStorage.setItem('santaDrawn2025',JSON.stringify(drawn));
     }
     function flip(){
       document.getElementById('flipInner').classList.add('flipped');
