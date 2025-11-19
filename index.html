@@ -14,10 +14,14 @@
     input,button{margin:6px 2px;padding:6px 10px;font-size:1.2em;}
     #nameList{width:280px;}
     h1{margin-bottom:.6em;}
+    #resetBtn{margin:15px 0;background:#eaf;padding:6px 14px;}
   </style>
 </head>
 <body>
   <h1>2025年度聖誕交換禮物抽獎</h1>
+
+  <button id="resetBtn" onclick="resetAll()">🆕> 重新分派（Organizer專用）</button>
+
   <div id="entry">
     <b>請選擇你的名字：</b>
     <select id="myName">
@@ -41,13 +45,14 @@
     <div id="reminder"></div>
   </div>
   <script>
-    // 已參加名單
+    // 名單
     const names = ["kitty","e0","may","tiff","snow","manying"];
-    // pairing 狀態（保存在 localStorage）
+    
+    // Pairing（保存在 localStorage）
     let assigned = JSON.parse(localStorage.getItem('santaPairs2025')||'null');
     let drawn = JSON.parse(localStorage.getItem('santaDrawn2025')||'{}');
 
-    // 產生 derangement，避免互抽
+    // Derangement function
     function generatePairing(namelist) {
       let tries=0, n=namelist.length, arr2=namelist.slice();
       while(true){
@@ -58,13 +63,11 @@
         let ok = true;
         for(let i=0;i<n;i++)
           if(arr2[i]===namelist[i]) ok = false;
-        // 減互抽
         for(let i=0;i<n;i++)
           if(arr2[arr2[i]]===namelist[i]) ok = false;
         if(ok) break;
         tries++; if(tries>30) break;
       }
-      // failSafe 防止自己
       let failSafe=0;
       while(arr2.some((x,i)=>x===namelist[i])) {
         for(let i=n-1;i>0;i--){
@@ -74,45 +77,68 @@
         failSafe++; if(failSafe>40) break;
       }
       let map={},used=new Set();
-      namelist.forEach((me,i)=>{
-        map[me]=arr2[i];
-        used.add(arr2[i]);
-      });
+      namelist.forEach((me,i)=>{ map[me]=arr2[i]; used.add(arr2[i]); });
       return map;
     }
 
-    // 首次 load: 根據 localStorage 配對, 沒有就重新分配
-    if(!assigned || Object.keys(assigned).length!==names.length) {
-      assigned = generatePairing(names);
-      localStorage.setItem('santaPairs2025',JSON.stringify(assigned));
-      drawn = {};
-      localStorage.setItem('santaDrawn2025',JSON.stringify(drawn));
+    // 首次/被reset: 生成 pairing
+    function ensurePairing(){
+      assigned = JSON.parse(localStorage.getItem('santaPairs2025')||'null');
+      drawn = JSON.parse(localStorage.getItem('santaDrawn2025')||'{}');
+      if(!assigned || Object.keys(assigned).length!==names.length) {
+        assigned = generatePairing(names);
+        localStorage.setItem('santaPairs2025',JSON.stringify(assigned));
+        drawn = {};
+        localStorage.setItem('santaDrawn2025',JSON.stringify(drawn));
+      }
     }
+    ensurePairing();
 
     function beginLuckyDraw(){
       let sel = document.getElementById("myName").value;
+      ensurePairing();
       if(!sel) {alert("請選擇你的名字！");return;}
       if(!names.includes(sel)){alert("唔係參加名單");return;}
-      // 已抽過
       if(drawn[sel]){
-        document.getElementById('entry').style.display='none';
-        document.getElementById('drawarea').style.display='';
-        document.getElementById('reminder').innerHTML =
-          `<b>${sel}</b> 已經抽過：你抽到要送禮物俾 <span style="color:#E23;">${assigned[sel]}</span>！`;
+        showOnceOnly(sel,true);
         return;
       }
-      // 給動畫：抽獎卡
       document.getElementById('entry').style.display='none';
       document.getElementById('drawarea').style.display='';
       document.getElementById('lotteryCard').style.display='';
       document.getElementById('flipInner').classList.remove('flipped');
-      document.getElementById('drawResult').innerHTML =
-        `<span style="font-weight:bold;">${sel}</span> 你要送禮物俾 👉 <span style="color:#962">${assigned[sel]}</span>！`;
-      drawn[sel]=true;
+      document.getElementById('drawResult').innerHTML = `<span style="font-weight:bold;">${sel}</span> 你要送禮物俾 👉 <span style="color:#962">${assigned[sel]}</span>！`;
+      drawn[sel] = true;
       localStorage.setItem('santaDrawn2025',JSON.stringify(drawn));
+      // 只顯示一次，3秒後清除 localStorage
+      setTimeout(()=>{
+        resetPerson(sel);
+        document.getElementById('drawarea').style.display='';
+        document.getElementById('lotteryCard').style.display='none';
+        document.getElementById('reminder').innerHTML = `<span style="color:#E23">${sel}已抽完（不能重覆查看）！</span>`;
+      }, 3000); // 3秒後就清
     }
     function flip(){
       document.getElementById('flipInner').classList.add('flipped');
+    }
+    function showOnceOnly(sel,already=false){
+      document.getElementById('entry').style.display='none';
+      document.getElementById('drawarea').style.display='';
+      document.getElementById('lotteryCard').style.display='none';
+      document.getElementById('reminder').innerHTML = already
+        ? `<span style="color:red">${sel} 已經抽過（不能重覆查看）！</span>` : `<span style="color:#E23">${sel}已抽完（不能重覆查看）！</span>`;
+    }
+    function resetPerson(sel){
+      // 移除抽過的人，防止 reload
+      let xdrawn=JSON.parse(localStorage.getItem('santaDrawn2025')||'{}');
+      if(xdrawn[sel]) delete xdrawn[sel];
+      localStorage.setItem('santaDrawn2025',JSON.stringify(xdrawn));
+    }
+    // Organizer reset：清除所有 pairing + 抽獎記錄
+    function resetAll(){
+      localStorage.removeItem('santaPairs2025');
+      localStorage.removeItem('santaDrawn2025');
+      location.reload();
     }
   </script>
 </body>
